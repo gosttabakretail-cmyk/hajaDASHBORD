@@ -15,25 +15,24 @@ async function loadData() {
     console.log('📥 Ответ сервера:', res.status, res.ok ? 'OK' : 'ERROR');
 
     if (!res.ok) {
-      throw new Error(`Ошибка доступа к таблице: ${res.status} ${res.statusText}.\n` + 
-                      `Проверьте: 1) ID таблицы. 2) Доступ "Все, у кого есть ссылка" -> "Читатель".`);
+      throw new Error(`Ошибка доступа к таблице: ${res.status} ${res.statusText}. Проверьте доступ "Читатель".`);
     }
 
     const text = await res.text();
     
     if (typeof text !== 'string' || !text.trim()) {
-      throw new Error('Получен пустой или некорректный ответ от сервера.');
+      throw new Error('Получен пустой ответ. Проверьте, есть ли данные в таблице.');
     }
 
     const lines = text.trim().split('\n');
     
     if (lines.length < 2) {
-      throw new Error('В файле только заголовки или он повреждён. Нужны данные хотя бы в одной строке.');
+      throw new Error('В таблице только заголовки, нужны строки с данными.');
     }
 
-    // ✅ ИСПРАВЛЕНИЕ ОШИБКИ №1: берём lines, а не lines
+    // ✅ ИСПРАВЛЕНИЕ: берем lines, а не lines
     const headers = lines.split(',').map(h => h.trim().toLowerCase());
-    console.log('📋 Обнаружены колонки:', headers);
+    console.log('📋 Колонки:', headers);
 
     const data = [];
     for (let i = 1; i < lines.length; i++) {
@@ -47,12 +46,12 @@ async function loadData() {
       data.push(row);
     }
 
-    console.log(`✅ Успешно загружено строк: \${data.length}`);
+    console.log(`✅ Загружено строк: \${data.length}`);
     return data;
 
   } catch (error) {
     console.error('❌ КРИТИЧЕСКАЯ ОШИБКА:', error.message);
-    alert('Не удалось загрузить данные!\n\nПричина: ' + error.message + '\n\nОткройте консоль (F12) для деталей.');
+    alert('Ошибка загрузки данных!\n\nПроверьте консоль (F12).\nЧастые причины:\n1. Неверный ID таблицы.\n2. В Google Таблице нет доступа "Читатель".');
     return [];
   }
 }
@@ -60,7 +59,7 @@ async function loadData() {
 function render(data) {
   const tbody = document.querySelector('#inventory-table tbody');
   if (!tbody) {
-    console.error('❌ Не найден элемент <tbody> с id="inventory-table". Проверьте index.html');
+    console.error('❌ Не найден <tbody> с id="inventory-table". Проверьте HTML.');
     return;
   }
 
@@ -80,8 +79,8 @@ function render(data) {
     
     totalQty += qty;
 
-    // ✅ ИСПРАВЛЕНИЕ ОШИБКИ №2: используем правильный синтаксис \${sku}
     const tr = document.createElement('tr');
+    // ✅ ИСПРАВЛЕНИЕ: правильный синтаксис \${sku}
     tr.innerHTML = `
       <td><strong>\${sku}</strong></td>
       <td>\${name}</td>
@@ -94,9 +93,10 @@ function render(data) {
     tbody.appendChild(tr);
   });
 
-  const elTotalSku = document.getElementById('total-sku');
-  const elTotalQty = document.getElementById('total-qty');
-  const elLowStock = document.getElementById('low-stock-count');
+  // ✅ ИСПРАВЛЕНИЕ: обновляем правильные ID из вашего HTML
+  const elTotalSku = document.getElementById('kpi-total-sku');
+  const elTotalQty = document.getElementById('kpi-total-qty');
+  const elLowStock = document.getElementById('kpi-low-stock');
 
   if (elTotalSku) elTotalSku.textContent = data.length;
   if (elTotalQty) elTotalQty.textContent = totalQty;
@@ -117,6 +117,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (data && data.length > 0) {
     render(data);
   } else if (data) {
-    console.warn('⚠️ Данные получены, но массив пуст. Таблица не будет отрисована.');
+    console.warn('⚠️ Данные получены, но массив пуст.');
   }
 });
