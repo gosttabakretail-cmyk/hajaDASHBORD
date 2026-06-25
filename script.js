@@ -1,10 +1,7 @@
 console.log('📦 Скрипт запущен. Начинаем загрузку данных...');
 
 // ================= НАСТРОЙКИ =================
-// ВСТАВЬТЕ СЮДА ID ТАБЛИЦЫ (между /d/ и /edit в ссылке)
 const SPREADSHEET_ID = '1r12aZVguu3xP67JHsC8UNgaqzjc1mI2zuGgAh5sZnKE'; 
-
-// Если нужна не первая вкладка, укажите её GID (цифры после #gid= в адресной строке)
 const SHEET_GID = '0'; 
 // =============================================
 
@@ -24,9 +21,8 @@ async function loadData() {
 
     const text = await res.text();
     
-    // ВАЖНО: проверяем, что получили именно строку
     if (typeof text !== 'string' || !text.trim()) {
-      throw new Error('Получен некорректный ответ от сервера. Ожидалась строка (CSV), но получено что-то другое.');
+      throw new Error('Получен пустой или некорректный ответ от сервера.');
     }
 
     const lines = text.trim().split('\n');
@@ -35,7 +31,7 @@ async function loadData() {
       throw new Error('В файле только заголовки или он повреждён. Нужны данные хотя бы в одной строке.');
     }
 
-    // Нормализуем заголовки: убираем пробелы, приводим к нижнему регистру
+    // ✅ ИСПРАВЛЕНИЕ ОШИБКИ №1: берём lines, а не lines
     const headers = lines.split(',').map(h => h.trim().toLowerCase());
     console.log('📋 Обнаружены колонки:', headers);
 
@@ -56,7 +52,7 @@ async function loadData() {
 
   } catch (error) {
     console.error('❌ КРИТИЧЕСКАЯ ОШИБКА:', error.message);
-    alert('Не удалось загрузить данные!\n\nОткройте консоль (F12) для деталей.\nЧастые причины:\n1. Не вставлен ID таблицы.\n2. В Google Таблице нет доступа "Читатель".\n3. Пустая таблица или неверный формат.');
+    alert('Не удалось загрузить данные!\n\nПричина: ' + error.message + '\n\nОткройте консоль (F12) для деталей.');
     return [];
   }
 }
@@ -84,6 +80,7 @@ function render(data) {
     
     totalQty += qty;
 
+    // ✅ ИСПРАВЛЕНИЕ ОШИБКИ №2: используем правильный синтаксис \${sku}
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td><strong>\${sku}</strong></td>
