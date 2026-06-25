@@ -1,5 +1,4 @@
 const CSV_URL = 'https://docs.google.com/spreadsheets/d/1r12aZVguu3xP67JHsC8UNgaqzjc1mI2zuGgAh5sZnKE/export?format=csv&gid=0'; // ВСТАВИТЬ СЮДА ВАШУ CSV-ССЫЛКУ
-
 async function loadData() {
   const res = await fetch(CSV_URL);
   const text = await res.text();
