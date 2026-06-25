@@ -13,48 +13,60 @@ async function loadData() {
     console.log('📥 Ответ сервера:', res.status, res.ok ? 'OK' : 'ERROR');
 
     if (!res.ok) {
-      throw new Error(`Ошибка HTTP: \${res.status}`);
+      throw new Error(`Ошибка HTTP: ${res.status} ${res.statusText}`);
     }
 
     const text = await res.text();
     
-    // 🔥 ГЛАВНАЯ ЗАЩИТА: Проверяем, не HTML ли нам прислали вместо CSV
+    // 🔥 ЗАЩИТА 1: Проверяем, не HTML ли нам прислали (страница входа)
     if (text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
-      throw new Error('Получен HTML вместо CSV. Скорее всего, у таблицы нет доступа "Читатель" для всех по ссылке. Откройте ссылку из консоли в новой вкладке, чтобы убедиться.');
+      throw new Error('Получен HTML вместо CSV. Проверьте доступ к таблице: "Все, у кого есть ссылка" -> "Читатель".');
     }
 
-    if (typeof text !== 'string' || !text.trim()) {
-      throw new Error('Пустой ответ от сервера.');
+    if (!text || !text.trim()) {
+      throw new Error('Получен пустой ответ. Проверьте, есть ли данные в таблице.');
     }
 
+    // 🔥 ЗАЩИТА 2: Гарантированно получаем массив строк
+    // split('\n') безопасен, если text - это строка (а мы это проверили выше)
     const lines = text.trim().split('\n');
     
     if (lines.length < 2) {
-      throw new Error('В файле только заголовки или он пуст.');
+      throw new Error('В таблице только заголовки или она полностью пуста. Нужны строки с данными.');
     }
 
-    // ✅ Берем первую строку массива
+    // Берем первую строку как заголовки
     const headers = lines.split(',').map(h => h.trim().toLowerCase());
-    console.log('📋 Колонки:', headers);
+    console.log('📋 Обнаружены колонки:', headers);
 
     const data = [];
     for (let i = 1; i < lines.length; i++) {
-      const cols = lines[i].trim().split(',');
-      if (cols.length === 0 || cols === '') continue;
+      // Пропускаем пустые строки
+      if (!lines[i].trim()) continue;
 
+      const cols = lines[i].split(',');
+      
+      // Если колонок меньше, чем заголовков, пропускаем или дополняем пустыми
       const row = {};
       headers.forEach((h, idx) => {
         row[h] = cols[idx] ? cols[idx].trim() : '';
       });
+      
+      // Добавляем строку только если есть хоть какие-то данные (опционально)
       data.push(row);
     }
 
-    console.log(`✅ Успешно загружено строк: \${data.length}`);
+    if (data.length === 0) {
+      console.warn('⚠️ Данные распаршены, но массив строк пуст (возможно, в таблице нет данных после заголовков).');
+    } else {
+      console.log(`✅ Успешно загружено строк: \${data.length}`);
+    }
+    
     return data;
 
   } catch (error) {
     console.error('❌ КРИТИЧЕСКАЯ ОШИБКА:', error.message);
-    alert('Не удалось загрузить данные!\n\nПричина: ' + error.message + '\n\nВАЖНО: Проверьте консоль (F12). Если там ссылка ведет на страницу входа Google — исправьте доступ к таблице на "Читатель".');
+    alert('Не удалось загрузить данные!\n\nПричина: ' + error.message + '\n\nПроверьте консоль (F12).');
     return [];
   }
 }
@@ -62,7 +74,7 @@ async function loadData() {
 function render(data) {
   const tbody = document.querySelector('#inventory-table tbody');
   if (!tbody) {
-    console.error('❌ Не найден <tbody>. Проверьте HTML.');
+    console.error('❌ Не найден элемент <tbody> с id="inventory-table". Проверьте index.html');
     return;
   }
 
@@ -78,7 +90,8 @@ function render(data) {
     const size = row['размер'] || '-';
     
     const qtyRaw = row['остаток'] || row['qty'] || '0';
-    const qty = parseInt(qtyRaw.replace(',', '.'), 10) || 0;
+    // Защита от запятых в числах (1,000 -> 1000)
+    const qty = parseInt(qtyRaw.replace(/,/g, '').replace(/\s/g, ''), 10) || 0;
     
     totalQty += qty;
 
@@ -95,7 +108,7 @@ function render(data) {
     tbody.appendChild(tr);
   });
 
-  // ✅ Обновляем правильные ID из вашего HTML
+  // Обновляем KPI карточки (используем ID из вашего HTML)
   const elTotalSku = document.getElementById('kpi-total-sku');
   const elTotalQty = document.getElementById('kpi-total-qty');
   const elLowStock = document.getElementById('kpi-low-stock');
@@ -104,7 +117,7 @@ function render(data) {
   if (elTotalQty) elTotalQty.textContent = totalQty;
   
   const lowStockCount = data.filter(r => {
-    const q = parseInt((r['остаток'] || r['qty'] || '0').replace(',', '.'), 10);
+    const q = parseInt((r['остаток'] || r['qty'] || '0').replace(/,/g, ''), 10);
     return q > 0 && q < 20;
   }).length;
   
@@ -116,9 +129,12 @@ function render(data) {
 document.addEventListener('DOMContentLoaded', async () => {
   console.log('🏁 DOM загружен. Вызываем loadData()...');
   const data = await loadData();
+  
   if (data && data.length > 0) {
     render(data);
   } else if (data) {
-    console.warn('⚠️ Данные получены, но массив пуст. Таблица не будет отрисована.');
+    // Если массив пуст, но ошибок не было - рисуем пустую таблицу или оставляем нули
+    console.warn('⚠️ Данные получены, но строк с данными нет. Таблица будет пустой.');
+    render(data); // Вызываем render даже с пустым массивом, чтобы обновить нули в KPI
   }
 });
