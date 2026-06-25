@@ -1,96 +1,85 @@
-// =============================================================================
-// БЛОК НАСТРОЕК: ИЗМЕНЯТЬ ТОЛЬКО ЗДЕСЬ
-// =============================================================================
+console.log('📦 Скрипт запущен. Начинаем загрузку данных...');
 
-// 1. ВСТАВЬТЕ СЮДА ID ВАШЕЙ GOOGLE ТАБЛИЦЫ.
-// Как найти: откройте таблицу в браузере. ID — это набор букв и цифр между "/d/" и "/edit".
-// Пример: https://docs.google.com/spreadsheets/d/[1A2B3C4D5E6F...]/edit...
-// Вставьте только то, что в скобках.
+// ================= НАСТРОЙКИ =================
+// ВСТАВЬТЕ СЮДА ID ТАБЛИЦЫ (между /d/ и /edit в ссылке)
 const SPREADSHEET_ID = '1r12aZVguu3xP67JHsC8UNgaqzjc1mI2zuGgAh5sZnKE'; 
 
-// 2. ВСТАВЬТЕ СЮДА GID НУЖНОГО ЛИСТА (вкладки).
-// Если у вас в таблице одна вкладка или нужна самая первая (левая), оставьте '0'.
-// Как найти: откройте нужный лист, посмотрите в конец адресной строки браузера.
-// Там будет написано #gid=123456789. Возьмите цифры после знака равно.
+// Если нужна не первая вкладка, укажите её GID (цифры после #gid= в адресной строке)
 const SHEET_GID = '0'; 
-
-// =============================================================================
-// ТЕХНИЧЕСКАЯ ЧАСТЬ: ФОРМИРОВАНИЕ ССЫЛКИ И ЗАГРУЗКА ДАННЫХ
-// =============================================================================
+// =============================================
 
 const CSV_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/export?format=csv&gid=${SHEET_GID}`;
 
 async function loadData() {
+  console.log('🔗 Формируем ссылку:', CSV_URL);
+  
   try {
     const res = await fetch(CSV_URL);
-    
+    console.log('📥 Ответ сервера:', res.status, res.ok ? 'OK' : 'ERROR');
+
     if (!res.ok) {
-      throw new Error(`Ошибка доступа: ${res.status} ${res.statusText}. Проверьте настройки доступа в Google Таблице.`);
+      throw new Error(`Ошибка доступа к таблице: ${res.status} ${res.statusText}.\n` + 
+                      `Проверьте: 1) ID таблицы. 2) Доступ "Все, у кого есть ссылка" -> "Читатель".`);
     }
 
     const text = await res.text();
+    
+    // ВАЖНО: проверяем, что получили именно строку
+    if (typeof text !== 'string' || !text.trim()) {
+      throw new Error('Получен некорректный ответ от сервера. Ожидалась строка (CSV), но получено что-то другое.');
+    }
+
     const lines = text.trim().split('\n');
     
     if (lines.length < 2) {
-      throw new Error('Файл CSV пуст или содержит только заголовки. Проверьте данные в таблице.');
+      throw new Error('В файле только заголовки или он повреждён. Нужны данные хотя бы в одной строке.');
     }
 
-    // Первая строка - это заголовки. Приводим их к нижнему регистру для удобства сравнения
+    // Нормализуем заголовки: убираем пробелы, приводим к нижнему регистру
     const headers = lines.split(',').map(h => h.trim().toLowerCase());
-    
-    // Проверка: есть ли в таблице нужные колонки
-    const requiredCols = ['sku', 'наименование', 'остаток'];
-    const missingCols = requiredCols.filter(col => !headers.includes(col));
-    
-    if (missingCols.length > 0) {
-      console.warn(`В таблице отсутствуют следующие колонки (проверьте регистр и пробелы): \${missingCols.join(', ')}`);
-    }
+    console.log('📋 Обнаружены колонки:', headers);
 
     const data = [];
-    
     for (let i = 1; i < lines.length; i++) {
       const cols = lines[i].trim().split(',');
-      
       if (cols.length === 0 || cols === '') continue;
-      
-      // Создаем объект, сопоставляя колонки по индексу из заголовков
+
       const row = {};
       headers.forEach((h, idx) => {
         row[h] = cols[idx] ? cols[idx].trim() : '';
       });
-      
       data.push(row);
     }
-    
+
+    console.log(`✅ Успешно загружено строк: \${data.length}`);
     return data;
+
   } catch (error) {
-    console.error('Критическая ошибка загрузки данных:', error);
-    alert('Не удалось загрузить данные!\n\n1. Проверьте ID таблицы в коде.\n2. Проверьте настройки доступа (Должно быть: "Все, у кого есть ссылка" -> "Читатель").\n3. Откройте консоль браузера (F12) для детальной ошибки.');
+    console.error('❌ КРИТИЧЕСКАЯ ОШИБКА:', error.message);
+    alert('Не удалось загрузить данные!\n\nОткройте консоль (F12) для деталей.\nЧастые причины:\n1. Не вставлен ID таблицы.\n2. В Google Таблице нет доступа "Читатель".\n3. Пустая таблица или неверный формат.');
+    return [];
   }
 }
 
 function render(data) {
   const tbody = document.querySelector('#inventory-table tbody');
   if (!tbody) {
-    console.error('Ошибка: не найден элемент <tbody> внутри таблицы с id="inventory-table". Проверьте index.html');
+    console.error('❌ Не найден элемент <tbody> с id="inventory-table". Проверьте index.html');
     return;
   }
-  
+
   tbody.innerHTML = '';
   
   let totalQty = 0;
 
   data.forEach(row => {
-    // Получаем данные, используя названия колонок в нижнем регистре (как мы их нормализовали при чтении)
-    const sku = row['sku'] || '-';
-    const name = row['наименование'] || '-';
+    const sku = row['sku'] || row['артикул'] || '-';
+    const name = row['наименование'] || row['name'] || '-';
     const model = row['модель'] || '-';
     const color = row['цвет'] || '-';
     const size = row['размер'] || '-';
     
-    // Парсим остаток. Если в CSV число с запятой (1,5), JS может прочитать как строку.
-    // Заменяем запятую на точку для корректного парсинга float, затем берем целое число.
-    const qtyRaw = row['остаток'] || '0';
+    const qtyRaw = row['остаток'] || row['qty'] || '0';
     const qty = parseInt(qtyRaw.replace(',', '.'), 10) || 0;
     
     totalQty += qty;
@@ -102,24 +91,35 @@ function render(data) {
       <td>\${model}</td>
       <td>\${color}</td>
       <td>\${size}</td>
-      <td class="text-right" style="font-weight:bold;">\${qty}</td>
+      <td class="text-right" style="font-weight:bold; color:#d9534f;">\${qty}</td>
       <td class="text-right">\${row['движение'] || '-'}</td>
     `;
     tbody.appendChild(tr);
   });
 
-  // Обновление итогов
+  const elTotalSku = document.getElementById('total-sku');
   const elTotalQty = document.getElementById('total-qty');
+  const elLowStock = document.getElementById('low-stock-count');
+
+  if (elTotalSku) elTotalSku.textContent = data.length;
   if (elTotalQty) elTotalQty.textContent = totalQty;
   
-  // Обновляем общее количество SKU (количество строк)
-  const elTotalSku = document.getElementById('total-sku');
-  if (elTotalSku) elTotalSku.textContent = data.length;
+  const lowStockCount = data.filter(r => {
+    const q = parseInt((r['остаток'] || r['qty'] || '0').replace(',', '.'), 10);
+    return q > 0 && q < 20;
+  }).length;
+  
+  if (elLowStock) elLowStock.textContent = lowStockCount;
+
+  console.log('📊 Таблица отрисована.');
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+  console.log('🏁 DOM загружен. Вызываем loadData()...');
   const data = await loadData();
-  if (data) {
+  if (data && data.length > 0) {
     render(data);
+  } else if (data) {
+    console.warn('⚠️ Данные получены, но массив пуст. Таблица не будет отрисована.');
   }
 });
