@@ -1,10 +1,9 @@
 // =============================================================================
-// БЛОК НАСТРОЕК: ИЗМЕНЯТЬ ТОЛЬКО ЗДЕСЬ (остальной код трогать не нужно!)
+// БЛОК НАСТРОЕК: ИЗМЕНЯТЬ ТОЛЬКО ЗДЕСЬ
 // =============================================================================
 
 // 1. ВСТАВЬТЕ СЮДА ID ВАШЕЙ GOOGLE ТАБЛИЦЫ.
-// Как найти: откройте таблицу в браузере, посмотрите на ссылку.
-// ID — это набор букв и цифр между "/d/" и "/edit".
+// Как найти: откройте таблицу в браузере. ID — это набор букв и цифр между "/d/" и "/edit".
 // Пример: https://docs.google.com/spreadsheets/d/[1A2B3C4D5E6F...]/edit...
 // Вставьте только то, что в скобках.
 const SPREADSHEET_ID = '1r12aZVguu3xP67JHsC8UNgaqzjc1mI2zuGgAh5sZnKE'; 
@@ -19,51 +18,45 @@ const SHEET_GID = '0';
 // ТЕХНИЧЕСКАЯ ЧАСТЬ: ФОРМИРОВАНИЕ ССЫЛКИ И ЗАГРУЗКА ДАННЫХ
 // =============================================================================
 
-// Скрипт сам собирает правильную ссылку для скачивания CSV.
-// Не меняйте эту строку!
 const CSV_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/export?format=csv&gid=${SHEET_GID}`;
 
-/**
- * Функция загрузки данных из CSV.
- * Она берет ссылку, скачивает файл, превращает его в удобный список объектов.
- */
 async function loadData() {
   try {
     const res = await fetch(CSV_URL);
     
-    // Проверка: если Google вернул ошибку (например, доступ закрыт), выбрасываем свою ошибку
     if (!res.ok) {
-      throw new Error(`Ошибка доступа к таблице: код \${res.status}. Проверьте настройки доступа ("Все, у кого есть ссылка" -> "Читатель").`);
+      throw new Error(`Ошибка доступа: ${res.status} ${res.statusText}. Проверьте настройки доступа в Google Таблице.`);
     }
 
     const text = await res.text();
     const lines = text.trim().split('\n');
     
-    if (lines.length === 0) {
-      throw new Error('Файл CSV пуст. Проверьте, есть ли данные в таблице.');
+    if (lines.length < 2) {
+      throw new Error('Файл CSV пуст или содержит только заголовки. Проверьте данные в таблице.');
     }
 
-    // Первая строка CSV — это заголовки (SKU, Название, Остаток и т.д.)
-    const headers = lines.split(',').map(h => h.trim());
+    // Первая строка - это заголовки. Приводим их к нижнему регистру для удобства сравнения
+    const headers = lines.split(',').map(h => h.trim().toLowerCase());
     
+    // Проверка: есть ли в таблице нужные колонки
+    const requiredCols = ['sku', 'наименование', 'остаток'];
+    const missingCols = requiredCols.filter(col => !headers.includes(col));
+    
+    if (missingCols.length > 0) {
+      console.warn(`В таблице отсутствуют следующие колонки (проверьте регистр и пробелы): \${missingCols.join(', ')}`);
+    }
+
     const data = [];
-    // Начинаем цикл со второй строки (индекс 1), чтобы пропустить заголовки
+    
     for (let i = 1; i < lines.length; i++) {
       const cols = lines[i].trim().split(',');
       
-      // Пропускаем полностью пустые строки
       if (cols.length === 0 || cols === '') continue;
       
-      // Защита: если количество колонок в строке не совпадает с заголовками, пропускаем её
-      if (cols.length !== headers.length) {
-        console.warn(`Строка \${i + 1} имеет неправильное количество колонок. Пропущена.`);
-        continue;
-      }
-
-      // Превращаем строку CSV в объект вида { sku: "123", name: "Товар", qty: "10" }
+      // Создаем объект, сопоставляя колонки по индексу из заголовков
       const row = {};
       headers.forEach((h, idx) => {
-        row[h] = cols[idx].trim();
+        row[h] = cols[idx] ? cols[idx].trim() : '';
       });
       
       data.push(row);
@@ -72,80 +65,58 @@ async function loadData() {
     return data;
   } catch (error) {
     console.error('Критическая ошибка загрузки данных:', error);
-    // Показываем пользователю понятное сообщение, если что-то пошло не так
-    alert('Не удалось загрузить данные!\n\nПроверьте:\n1. ID таблицы в коде.\n2. Настройки доступа в Google Таблице (должно быть "Все, у кого есть ссылка" -> "Читатель").\n3. Консоль браузера (F12) для детальной ошибки.');
+    alert('Не удалось загрузить данные!\n\n1. Проверьте ID таблицы в коде.\n2. Проверьте настройки доступа (Должно быть: "Все, у кого есть ссылка" -> "Читатель").\n3. Откройте консоль браузера (F12) для детальной ошибки.');
   }
 }
 
-/**
- * Функция отрисовки таблицы и подсчета итогов.
- * Она ищет элементы на странице и заполняет их данными.
- */
 function render(data) {
-  // Ищем таблицу на странице по ID. Убедитесь, что в вашем index.html у таблицы есть id="inventory-table"
   const tbody = document.querySelector('#inventory-table tbody');
   if (!tbody) {
     console.error('Ошибка: не найден элемент <tbody> внутри таблицы с id="inventory-table". Проверьте index.html');
     return;
   }
   
-  tbody.innerHTML = ''; // Очищаем таблицу перед новой отрисовкой
+  tbody.innerHTML = '';
   
-  let totalSku = 0;
   let totalQty = 0;
-  let totalValue = 0;
 
   data.forEach(row => {
-    totalSku++;
+    // Получаем данные, используя названия колонок в нижнем регистре (как мы их нормализовали при чтении)
+    const sku = row['sku'] || '-';
+    const name = row['наименование'] || '-';
+    const model = row['модель'] || '-';
+    const color = row['цвет'] || '-';
+    const size = row['размер'] || '-';
     
-    // --- УМНЫЙ ПОИСК КОЛОНОК ---
-    // Скрипт пытается найти данные, даже если названия столбцов немного отличаются регистром.
-    // Например, если в CSV написано "Qty", а в коде мы ищем "qty", он всё равно найдёт.
-    
-    // Получаем количество (ищем варианты: qty, Qty, quantity, Quantity)
-    const qtyRaw = row.qty || row.Qty || row.quantity || row.Quantity || '0';
+    // Парсим остаток. Если в CSV число с запятой (1,5), JS может прочитать как строку.
+    // Заменяем запятую на точку для корректного парсинга float, затем берем целое число.
+    const qtyRaw = row['остаток'] || '0';
     const qty = parseInt(qtyRaw.replace(',', '.'), 10) || 0;
+    
     totalQty += qty;
 
-    // Получаем цену (ищем варианты: price, Price, cost, Cost)
-    // .replace(',', '.') нужен, чтобы корректно обрабатывать числа вида "100,50"
-    const priceRaw = row.price || row.Price || row.cost || row.Cost || '0';
-    const price = parseFloat(priceRaw.replace(',', '.')) || 0;
-    totalValue += qty * price;
-
-    // Получаем SKU (ищем варианты: sku, Sku, article, Article)
-    const sku = row.sku || row.Sku || row.article || row.Article || '-';
-    
-    // Получаем название (ищем варианты: name, Name, product, Product, title, Title)
-    const name = row.name || row.Name || row.product || row.Product || row.title || row.Title || '-';
-
-    // Создаем новую строку таблицы
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td>\${sku}</td>
+      <td><strong>\${sku}</strong></td>
       <td>\${name}</td>
-      <td class="text-right">\${qty}</td>
-      <td class="text-right">\${price.toLocaleString('ru-RU', {minimumFractionDigits: 2})}</td>
-      <td class="text-right">\${(qty * price).toLocaleString('ru-RU', {minimumFractionDigits: 2})}</td>
+      <td>\${model}</td>
+      <td>\${color}</td>
+      <td>\${size}</td>
+      <td class="text-right" style="font-weight:bold;">\${qty}</td>
+      <td class="text-right">\${row['движение'] || '-'}</td>
     `;
     tbody.appendChild(tr);
   });
 
-  // --- ЗАПОЛНЕНИЕ ИТОГОВ ---
-  // Ищем элементы для вывода итогов по ID.
-  // Убедитесь, что в index.html у вас есть элементы с такими id: total-sku, total-qty, total-value
-  const elTotalSku = document.getElementById('total-sku');
+  // Обновление итогов
   const elTotalQty = document.getElementById('total-qty');
-  const elTotalValue = document.getElementById('total-value');
-
-  if (elTotalSku) elTotalSku.textContent = totalSku;
   if (elTotalQty) elTotalQty.textContent = totalQty;
-  if (elTotalValue) elTotalValue.textContent = totalValue.toLocaleString('ru-RU', {minimumFractionDigits: 2});
+  
+  // Обновляем общее количество SKU (количество строк)
+  const elTotalSku = document.getElementById('total-sku');
+  if (elTotalSku) elTotalSku.textContent = data.length;
 }
 
-// =============================================================================
-// ЗАПУСК: когда страница полностью загрузится, запускаем скрипт
-// =============================================================================
 document.addEventListener('DOMContentLoaded', async () => {
   const data = await loadData();
   if (data) {
