@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Склад: остатки и движения</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>���лад: остатки и движения</h1>
+    <label>
+      Поиск по наименованию/SKU:
+      <input type="text" id="search" placeholder="HOODIE, FLEECE..." />
+    </label>
+    <button id="themeToggle">☀️ Светлая тема</button>
+  </header>
+
+  <main>
+    <section class="kpi-cards">
+      <div class="card">
+        <div class="label">Всего SKU</div>
+        <div class="value" id="kpi-total-sku">0</div>
+      </div>
+      <div class="card">
+        <div class="label">Общий остаток</div>
+        <div class="value" id="kpi-total-qty">0</div>
+      </div>
+      <div class="card">
+        <div class="label">Низкие остатки (<20)</div>
+        <div class="value" id="kpi-low-stock">0</div>
+      </div>
+    </section>
+
+    <table id="inventory-table">
+      <thead>
+        <tr>
+          <th>SKU</th>
+          <th>Наименование</th>
+          <th>Модель</th>
+          <th>Цвет</th>
+          <th>Размер</th>
+          <th>Остаток</th>
+          <th>Движение</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
